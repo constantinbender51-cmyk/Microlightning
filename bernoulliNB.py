@@ -184,6 +184,14 @@ def audit_print(audit):
 if __name__ == "__main__":
     daily = load_daily(PATH)
     data  = add_features(daily)
+    # ---------- quick print: last 10 indicator values + terciles ----------
+    def peek_terciles(df, indicator='mfi', n=10):
+        cols = [indicator] + [c for c in df.columns if c.startswith(indicator + '_')]
+        print(df[cols].dropna().tail(n))
+
+    # usage (inside __main__ after add_features):
+    peek_terciles(data, 'mfi')      # or 'ad', 'bbw', 'kcw', 'psar_up'
+
     sig   = walk_forward(data)
     audit = data.join(sig).join(data[['open','close']].shift(-1), rsuffix='_next')
     audit['pnl'] = audit['pos'] * (audit['close_next'] - audit['close'])
