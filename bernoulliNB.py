@@ -87,22 +87,33 @@ def add_features(df):
     # ---------- tercile bins ----------
     def bin3(ser, name):
         roll = ser.rolling(ROLL)
-        q1 = roll.quantile(.33)
-        q2 = roll.quantile(.67)
-        # force monotonic & drop NaN edges
-        q1 = q1.where(q1 < q2, q2 * 0.999)
-        bins = pd.concat([pd.Series(-np.inf, index=ser.index),
-                          q1, q2,
-                          pd.Series(np.inf, index=ser.index)], axis=1).min(axis=1)
-        cat = pd.cut(ser, bins=bins, labels=[f'{name}_L', f'{name}_M', f'{name}_H'])
-        return pd.get_dummies(cat, prefix=name)
+        q1 = roll.quantile(0.33)
+        q2 = roll.quantile(0.67)
+        # guarantee q1 < q2
+        q2 = q2.clip(lower=q1 + 1e-8)
+        # build bins only where both quantiles are finite
+        valid = q1.notna() & q2.notna()
+        bins = np.where(valid,
+                        np.stack([np.full(len(ser), -np.inf),
+                                  q1.values, q2.values,
+                                  np.full(len(ser),  np.inf)], axis=1),
+                        np.nan)
+        # labels for valid rows
+        cat = pd.cut(ser[valid], bins=bins[valid, :], labels=[f'{name}_L', f'{name}_M', f'{name}_H'])
+        dummies = pd.get_dummies(cat, prefix=name)
+        # re-index to original length (fill missing rows with 0)
+        return dummies.reindex(ser.index, fill_value=0)
 
     df = pd.concat([df,
                     bin3(df['mfi'],  'mfi'),
                     bin3(df['ad'],   'ad'),
                     bin3(df['bbw'],  'bbw'),
                     bin3(df['kcw'],  'kcw'),
-                    bin3(df['psar_up'], 'psar')], axis=1).dropna()
+                    bin3(df['psar_up'], 'psar')], axis=1)
+
+    # drop rows where any bin column is NaN or all-zero (first 21)
+    df = df.dropna(subset=feat_cols(df))
+    df = df.loc[df[feat_cols(df)].sum(axis=1) > 0]
     return df
 
 # ---------- build feature list ----------
