@@ -1,3 +1,9 @@
+"""
+BTC daily next-bar predictor
+BernoulliNB with 7 binary features, rolling 252-day retrain, walk-forward
+Slow-print with live metrics
+"""
+
 import pandas as pd
 import numpy as np
 import time
@@ -55,13 +61,46 @@ def main():
     audit['pnl'] = audit['pos'] * (audit['close_next'] - audit['open_next'])
     audit = audit.dropna(subset=['pnl'])
 
-    # slow print
+    # ---------- slow print with metrics ----------
+    correct = 0
+    trades  = 0
+    equity  = 0.0
+    longs = shorts = flats = 0
+
     for ts, row in audit.iterrows():
+        # ---- was the directional call right? ----
+        real_move = np.sign(row['close_next'] - row['open_next'])
+        call_move = np.sign(row['pos'])
+        if call_move != 0:               # ignore flat days for hit-rate
+            trades += 1
+            if call_move == real_move:
+                correct += 1
+
+        # ---- running equity ----
+        equity += row['pnl']
+
+        # ---- counters ----
+        if row['pos'] == 1:   longs  += 1
+        elif row['pos'] == -1: shorts += 1
+        else:                  flats  += 1
+
+        # ---- print ----
+        hit_rate = 100 * correct / trades if trades else 0
+        avg_pnl  = equity / trades if trades else 0
         print(f"{ts.date()} | "
               f"O:{row['open']:7.2f} H:{row['high']:7.2f} L:{row['low']:7.2f} C:{row['close']:7.2f} | "
               f"prob:{row['prob']:.3f} pos:{row['pos']: 2.0f} | "
-              f"P&L:{row['pnl']: 7.2f}")
+              f"P&L:{row['pnl']: 7.2f} | "
+              f"Hit:{hit_rate:5.1f}%  Trades:{trades}  Eq:{equity: 10.2f}  Avg:{avg_pnl: 6.2f}")
         time.sleep(0.01)
+
+    # ---------- final summary ----------
+    print("\n=== FINAL ===")
+    print(f"Total days: {len(audit)}")
+    print(f"Long {longs}  Short {shorts}  Flat {flats}")
+    print(f"Trades with market exposure: {trades}")
+    print(f"Correct directional calls: {correct} / {trades}  →  {100*correct/trades:.2f} %")
+    print(f"Final equity: {equity:,.2f}  (avg per trade: {equity/trades:,.2f})")
 
 if __name__ == "__main__":
     main()
