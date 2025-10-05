@@ -39,7 +39,6 @@ def add_features(df):
         pos_m   = money.where(typical >= typical.shift(1), 0).rolling(n).sum()
         neg_m   = money.where(typical <  typical.shift(1), 0).rolling(n).sum()
         return 100 - (100 / (1 + pos_m / (neg_m + 1e-6)))
-        
     df['mfi'] = mfi_series(df['high'], df['low'], df['close'], df['volume'])
 
     # 2. Accumulation/Distribution
@@ -54,7 +53,6 @@ def add_features(df):
 
     # 4. Keltner-channel width  (20 EMA ± 2 ATR)
     ema20 = df['close'].ewm(span=20).mean()
-    # true-range vectorised
     tr1 = df['high'] - df['low']
     tr2 = (df['high'] - df['close'].shift(1)).abs()
     tr3 = (df['low']  - df['close'].shift(1)).abs()
@@ -89,9 +87,14 @@ def add_features(df):
     # ---------- tercile bins ----------
     def bin3(ser, name):
         roll = ser.rolling(ROLL)
-        q1 = roll.quantile(.33); q2 = roll.quantile(.67)
-        cat = pd.cut(ser, bins=[-np.inf, q1, q2, np.inf],
-                     labels=[f'{name}_L', f'{name}_M', f'{name}_H'])
+        q1 = roll.quantile(.33)
+        q2 = roll.quantile(.67)
+        # force monotonic & drop NaN edges
+        q1 = q1.where(q1 < q2, q2 * 0.999)
+        bins = pd.concat([pd.Series(-np.inf, index=ser.index),
+                          q1, q2,
+                          pd.Series(np.inf, index=ser.index)], axis=1).min(axis=1)
+        cat = pd.cut(ser, bins=bins, labels=[f'{name}_L', f'{name}_M', f'{name}_H'])
         return pd.get_dummies(cat, prefix=name)
 
     df = pd.concat([df,
@@ -99,8 +102,7 @@ def add_features(df):
                     bin3(df['ad'],   'ad'),
                     bin3(df['bbw'],  'bbw'),
                     bin3(df['kcw'],  'kcw'),
-                    bin3(df['psar_up'], 'psar')], axis=1).fillna(0)
-
+                    bin3(df['psar_up'], 'psar')], axis=1).dropna()
     return df
 
 # ---------- build feature list ----------
@@ -134,8 +136,12 @@ def walk_forward(df):
 
 # ---------- slow audit print ----------
 def audit_print(audit):
-    correct = trades = equity = longs = shorts = flats = 0
+    correct = 0
+    trades  = 0
+    equity  = 0.0
+    longs = shorts = flats = 0
     for ts, row in audit.iterrows():
+        # ---- was the directional call right? ----
         real_move = np.sign(row['close_next'] - row['close'])
         call_move = np.sign(row['pos'])
         if call_move != 0:
@@ -148,7 +154,7 @@ def audit_print(audit):
         else:                  flats += 1
 
         hit_rate = 100 * correct / trades if trades else 0
-        avg_pnl = equity / trades if trades else 0
+        avg_pnl  = equity / trades if trades else 0
         print(f"{ts.date()} | "
               f"O:{row['open']:7.2f} H:{row['high']:7.2f} L:{row['low']:7.2f} C:{row['close']:7.2f} | "
               f"prob:{row['prob']:.3f} pos:{row['pos']: 2.0f} | "
