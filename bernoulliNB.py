@@ -84,26 +84,28 @@ def add_features(df):
         trend.append(int(uptrend))
     df['psar_up'] = trend
 
-def bin3(ser, name):
-    roll = ser.rolling(ROLL)
-    q1 = roll.quantile(0.33)
-    q2 = roll.quantile(0.67)
-    q2 = q2.where(q2 > q1, q1 + 1e-8)          # monotone
-    valid = q1.notna() & q2.notna()
+    # ---------- tercile binning ----------
+    def bin3(ser, name):
+        roll = ser.rolling(ROLL)
+        q1 = roll.quantile(0.33)
+        q2 = roll.quantile(0.67)
+        q2 = q2.where(q2 > q1, q1 + 1e-8)          # monotone
+        valid = q1.notna() & q2.notna()
 
-    labels = [f'{name}_L', f'{name}_M', f'{name}_H']
-    out = pd.DataFrame(0, index=ser.index, columns=labels, dtype=int)
+        labels = [f'{name}_L', f'{name}_M', f'{name}_H']
+        out = pd.DataFrame(0, index=ser.index, columns=labels, dtype=int)
 
-    for idx in ser[valid].index:
-        val, e1, e2 = ser.loc[idx], q1.loc[idx], q2.loc[idx]
-        if val <= e1:
-            out.loc[idx, f'{name}_L'] = 1
-        elif val <= e2:
-            out.loc[idx, f'{name}_M'] = 1
-        else:
-            out.loc[idx, f'{name}_H'] = 1
-    return out
+        for idx in ser[valid].index:
+            val, e1, e2 = ser.loc[idx], q1.loc[idx], q2.loc[idx]
+            if val <= e1:
+                out.loc[idx, f'{name}_L'] = 1
+            elif val <= e2:
+                out.loc[idx, f'{name}_M'] = 1
+            else:
+                out.loc[idx, f'{name}_H'] = 1
+        return out
 
+    # >>> concatenate the one-hot bins <<<
     df = pd.concat([df,
                     bin3(df['mfi'],  'mfi'),
                     bin3(df['ad'],   'ad'),
@@ -114,8 +116,8 @@ def bin3(ser, name):
     # drop rows where any bin column is NaN or all-zero (first 21)
     df = df.dropna(subset=feat_cols(df))
     df = df.loc[df[feat_cols(df)].sum(axis=1) > 0]
-    return df
-
+    return df          # <- make sure we always return the DataFrame
+    
 # ---------- build feature list ----------
 def feat_cols(df):
     return [c for c in df.columns if c.startswith(('mfi_', 'ad_', 'bbw_', 'kcw_', 'psar_'))] + ['vol_up']
