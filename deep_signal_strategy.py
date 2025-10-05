@@ -14,7 +14,7 @@ STOP_FRAC = 0.05
 # ------------------------------------------------------------------
 # 1. load hourly csv -> daily candles + SMAs
 # ------------------------------------------------------------------
-def load_daily(path=\'xbtusd_1h_8y.csv\'):
+def load_daily(path='xbtusd_1h_8y.csv'):
     df = pd.read_csv(path)
     time_col = \'open_time\' if \'open_time\' in df.columns else \'timestamp\'
     df[time_col] = pd.to_datetime(df[time_col])
