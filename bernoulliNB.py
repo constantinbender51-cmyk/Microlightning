@@ -84,25 +84,25 @@ def add_features(df):
         trend.append(int(uptrend))
     df['psar_up'] = trend
 
-    # ---------- tercile bins ----------
     def bin3(ser, name):
-        roll = ser.rolling(ROLL)
-        q1 = roll.quantile(0.33)
-        q2 = roll.quantile(0.67)
-        # enforce q1 < q2
-        q2 = q2.where(q2 > q1, q1 + 1e-8)
+    roll = ser.rolling(ROLL)
+    q1 = roll.quantile(0.33)
+    q2 = roll.quantile(0.67)
+    q2 = q2.where(q2 > q1, q1 + 1e-8)          # monotone
+    valid = q1.notna() & q2.notna()
 
-        valid = q1.notna() & q2.notna()
-        labels = [f'{name}_L', f'{name}_M', f'{name}_H']
-        out = pd.DataFrame(0, index=ser.index, columns=labels)
+    labels = [f'{name}_L', f'{name}_M', f'{name}_H']
+    out = pd.DataFrame(0, index=ser.index, columns=labels, dtype=int)
 
-        for idx in ser[valid].index:
-            edges = [-np.inf, q1.loc[idx], q2.loc[idx], np.inf]
-            out.loc[idx] = pd.cut([ser.loc[idx]], bins=edges, labels=labels).astype(str).map(
-                {f'{name}_L': [1,0,0], f'{name}_M': [0,1,0], f'{name}_H': [0,0,1]}
-            ).fillna(0).iloc[0]
-
-        return out.add_prefix(name + '_')
+    for idx in ser[valid].index:
+        val, e1, e2 = ser.loc[idx], q1.loc[idx], q2.loc[idx]
+        if val <= e1:
+            out.loc[idx, f'{name}_L'] = 1
+        elif val <= e2:
+            out.loc[idx, f'{name}_M'] = 1
+        else:
+            out.loc[idx, f'{name}_H'] = 1
+    return out
 
     df = pd.concat([df,
                     bin3(df['mfi'],  'mfi'),
