@@ -54,10 +54,12 @@ def add_features(df):
 
     # 4. Keltner-channel width  (20 EMA ± 2 ATR)
     ema20 = df['close'].ewm(span=20).mean()
-    atr   = df[['high','low','close']].apply(
-        lambda x: np.maximum(x['high']-x['low'],
-                             np.maximum(abs(x['high']-x['close'].shift(1)),
-                                        abs(x['low'] -x['close'].shift(1)))), axis=1).ewm(span=20).mean()
+    # true-range vectorised
+    tr1 = df['high'] - df['low']
+    tr2 = (df['high'] - df['close'].shift(1)).abs()
+    tr3 = (df['low']  - df['close'].shift(1)).abs()
+    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = true_range.ewm(span=20).mean()
     df['kcw'] = (ema20 + 2 * atr - (ema20 - 2 * atr)) / ema20
 
     # 5. Parabolic-SAR direction  (0 = down, 1 = up)
