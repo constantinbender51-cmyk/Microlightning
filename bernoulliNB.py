@@ -39,6 +39,7 @@ def add_features(df):
         pos_m   = money.where(typical >= typical.shift(1), 0).rolling(n).sum()
         neg_m   = money.where(typical <  typical.shift(1), 0).rolling(n).sum()
         return 100 - (100 / (1 + pos_m / (neg_m + 1e-6)))
+        
     df['mfi'] = mfi_series(df['high'], df['low'], df['close'], df['volume'])
 
     # 2. Accumulation/Distribution
