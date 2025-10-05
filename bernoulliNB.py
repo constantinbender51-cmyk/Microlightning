@@ -64,8 +64,10 @@ def walk_forward(df):
         model.fit(X_train, y_train)
 
         # ---- predict ----
-        x_today = df[feats].iloc[i].values.reshape(1, -1)
+        # NEW
+        x_today = df[feats].iloc[i:i+1]         # keeps DataFrame + column names
         prob = model.predict_proba(x_today)[0, 1]
+
 
         # ---- position rule ----
         if prob > BUY:   pos =  1
