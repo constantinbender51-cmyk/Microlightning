@@ -1,47 +1,62 @@
+from fastapi import FastAPI, Response
+from fastapi.responses import StreamingResponse
 import pandas as pd
-import time
+import io
+import os
 
-# ------------------------------------------------------------------
-# 1. LOAD CSV & CONVERT TO DAILY CANDLES
-# ------------------------------------------------------------------
-def load_and_convert_to_daily(path='xbtusd_1h_8y.csv'):
+app = FastAPI(title="XBTUSD daily exporter")
+
+CSV_PATH = os.getenv("CSV_PATH", "xbtusd_1h_8y.csv")
+
+# ---------- your original load/resample logic ----------
+def load_and_convert_to_daily(path=CSV_PATH):
     try:
         df = pd.read_csv(path)
-        df['open_time'] = pd.to_datetime(df['open_time'], format='ISO8601')
-        df.set_index('open_time', inplace=True)
-        df.sort_index(inplace=True)
+        df["open_time"] = pd.to_datetime(df["open_time"], format="ISO8601")
+        df = df.set_index("open_time").sort_index()
 
-        # Resample to daily candles
-        daily = df.resample('D').agg({
-            'open':  'first',
-            'high':  'max',
-            'low':   'min',
-            'close': 'last',
-            'volume': 'sum'
-        }).dropna()
-
+        daily = (
+            df.resample("D")
+            .agg(
+                {
+                    "open": "first",
+                    "high": "max",
+                    "low": "min",
+                    "close": "last",
+                    "volume": "sum",
+                }
+            )
+            .dropna()
+        )
         return daily
     except FileNotFoundError:
-        print("Error: 'xbtusd_1h_8y.csv' not found."); return None
-    except Exception as e:
-        print(f"Data load error: {e}"); return None
+        return None
+    except Exception:
+        return None
 
-# ------------------------------------------------------------------
-# 2. PRINT DAILY CANDLES WITH 0.01 sec DELAY
-# ------------------------------------------------------------------
-def print_daily_candles(daily_df):
-    if daily_df is None or daily_df.empty:
-        print("No daily candles to display.")
-        return
-
-    for ts, row in daily_df.iterrows():
-        print(f"{ts.date()} | O:{row['open']:.2f} H:{row['high']:.2f} L:{row['low']:.2f} C:{row['close']:.2f} V:{row['volume']:.0f}")
-        time.sleep(0.01)
-
-# ------------------------------------------------------------------
-# 3. ONE-CLICK RUN
-# ------------------------------------------------------------------
-if __name__ == "__main__":
+# ---------- download endpoint ----------
+@app.get("/download/daily")
+def download_daily():
     daily = load_and_convert_to_daily()
-    print_daily_candles(daily)
-  
+    if daily is None:
+        return Response("Daily data not available", status_code=500)
+
+    buf = io.StringIO()
+    daily.to_csv(buf, index_label="date")
+    buf.seek(0)
+
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="XBTUSD_daily.csv"'},
+    )
+
+# ---------- health check ----------
+@app.get("/")
+def root():
+    return {"message": "XBTUSD daily exporter is up"}
+
+# ---------- local dev only ----------
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
