@@ -57,7 +57,7 @@ y_test  = test_df['y'].values
 # 5. Model -------------------------------------------------------------------
 base = DecisionTreeRegressor(max_depth=4, min_samples_leaf=20)
 model = BaggingRegressor(
-    base_estimator=base,
+    estimator=base,
     n_estimators=500,
     max_samples=0.8,
     max_features=0.8,
