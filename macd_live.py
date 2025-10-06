@@ -250,7 +250,7 @@ def main():
     args = ap.parse_args()
 
     api_key = os.getenv("KRAKEN_API_KEY")
-    api_sec = os.getenv("KRAKEN_SECRET_KEY")
+    api_sec = os.getenv("KRAKEN_API_SECRET")
     if not api_key or not api_sec:
         log.error("Env vars KRAKEN_API_KEY / KRAKEN_SECRET_KEY missing")
         sys.exit(1)
