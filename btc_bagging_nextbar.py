@@ -8,7 +8,9 @@ import numpy as np
 
 # 1. Load data ---------------------------------------------------------------
 df = pd.read_csv('btc_daily.csv', parse_dates=['date']).sort_values('date')
-df = df[['date', 'open', 'high', 'low', 'close']].dropna()
+
+# KEEP volume (and any other cols you may add later)
+df = df[['date', 'open', 'high', 'low', 'close', 'volume']].dropna()
 
 # 2. Build base features -----------------------------------------------------
 df['ret'] = df['close'].pct_change()
