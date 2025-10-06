@@ -66,16 +66,26 @@ X_test = scaler.transform(test_df[X_cols])
 y_test = test_df['y'].values
 
 # 5. Model --------------------------------------------------------------------
-base = DecisionTreeRegressor(max_depth=4, min_samples_leaf=20)
-model = BaggingRegressor(
-    estimator=base,
-    n_estimators=500,
-    max_samples=0.8,
-    max_features=0.8,
-    random_state=42,
-    n_jobs=-1
-)
+from sklearn.model_selection import GridSearchCV
+
+base = DecisionTreeRegressor(random_state=42)
+
+grid = {
+    'estimator__max_depth':        [3, 4, 5, 6],
+    'estimator__min_samples_leaf': [10, 20, 40, 80],
+    'estimator__max_features':     [0.5, 0.6, 0.7, 0.8, 1.0],
+    'n_estimators':                [200, 500, 1000, 1500],
+    'max_samples':                 [0.6, 0.7, 0.8, 1.0],
+    'max_features':                [0.6, 0.7, 0.8, 1.0]
+}
+
+bag = BaggingRegressor(estimator=base, random_state=42, n_jobs=-1)
+
+model = GridSearchCV(bag, grid, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
 model.fit(X_train, y_train)
+
+print('Best params:', model.best_params_)
+model = model.best_estimator_
 
 # 6. Predict ------------------------------------------------------------------
 pred_ret = model.predict(X_test)
