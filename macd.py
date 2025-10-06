@@ -18,22 +18,30 @@ cash = 10_000
 strat = [cash]
 in_pos = 0
 entry = np.nan
+trades = []  # store (entry_date, exit_date, ret)
+
 for i, p in enumerate(pos[1:], 1):
     if in_pos == 0 and p != 0:          # enter
         in_pos, entry = p, df.close.iloc[i]
+        e_date = df.date.iloc[i]
     elif in_pos != 0:
         chg = df.close.iloc[i] / entry - 1
-        if (in_pos == 1 and chg <= -0.02) or (in_pos == -1 and chg >= 0.02):
-            in_pos = 0                  # stopped out
-        elif p == -in_pos:              # opposite signal
-            in_pos = p
-            entry = df.close.iloc[i]
+        if (in_pos == 1 and chg <= -0.02) or (in_pos == -1 and chg >= 0.02) or p == -in_pos:
+            ret = chg if in_pos == 1 else -chg
+            trades.append((e_date, df.date.iloc[i], ret))
+            in_pos = (p if p == -in_pos else 0)
+            entry = (df.close.iloc[i] if in_pos else np.nan)
+            if in_pos: e_date = df.date.iloc[i]
     strat.append(strat[-1] * (1 + (df.close.iloc[i]/df.close.iloc[i-1]-1)*in_pos))
 
 strat = pd.Series(strat, index=df.index)
 hold = (df.close / df.close.iloc[0]) * cash
 
+# worst trade
+t = min(trades, key=lambda x: x[2])
 maxbal = strat.cummax()
+
 print(f"Final MACD: €{strat.iloc[-1]:,.0f}")
 print(f"Final HOLD: €{hold.iloc[-1]:,.0f}")
 print(f"Max drawdown: {(strat/maxbal-1).min()*100:.1f}%")
+print(f"Worst trade: {t[2]*100:.1f}% on {t[1].strftime('%Y-%m-%d')}")
