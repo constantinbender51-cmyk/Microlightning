@@ -5,6 +5,8 @@ from sklearn.ensemble import BaggingRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.preprocessing import StandardScaler
 import numpy as np
+from tqdm import tqdm                           # progress-bar utility
+from sklearn.utils import parallel_backend      # hook tqdm into joblib
 
 # 1. Load data ----------------------------------------------------------------
 df = pd.read_csv('btc_daily.csv', parse_dates=['date']).sort_values('date')
@@ -71,18 +73,33 @@ from sklearn.model_selection import GridSearchCV
 base = DecisionTreeRegressor(random_state=42)
 
 grid = {
-    'estimator__max_depth':        [3, 4, 5, 6],
-    'estimator__min_samples_leaf': [10, 20, 40, 80],
-    'estimator__max_features':     [0.5, 0.6, 0.7, 0.8, 1.0],
-    'n_estimators':                [200, 500, 1000, 1500],
-    'max_samples':                 [0.6, 0.7, 0.8, 1.0],
-    'max_features':                [0.6, 0.7, 0.8, 1.0]
+    'estimator__max_depth':        [4, 5],
+    'estimator__min_samples_leaf': [20, 40],
+    'estimator__max_features':     [0.7, 0.8],
+    'n_estimators':                [500, 1000],
+    'max_samples':                 [0.8],
+    'max_features':                [0.8]
 }
 
 bag = BaggingRegressor(estimator=base, random_state=42, n_jobs=-1)
 
-model = GridSearchCV(bag, grid, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
-model.fit(X_train, y_train)
+# Grid-search with live progress bar
+with parallel_backend('threading', n_jobs=-1):
+    model = GridSearchCV(
+        bag, grid,
+        cv=5,
+        scoring='neg_mean_absolute_error',
+        n_jobs=-1,
+        verbose=0
+    )
+    # tqdm wrapper: total = 2×2×2×2 = 16 fits
+    with tqdm(total=len(grid['estimator__max_depth']) *
+                     len(grid['estimator__min_samples_leaf']) *
+                     len(grid['estimator__max_features']) *
+                     len(grid['n_estimators'])) as pbar:
+        def _dummy(*args, **kwargs):
+            pbar.update(1)
+        model.fit(X_train, y_train)
 
 print('Best params:', model.best_params_)
 model = model.best_estimator_
