@@ -1,132 +1,95 @@
 import pandas as pd
 import numpy as np
-import time
+from itertools import product
+import time, pathos.multiprocessing as mp   # pip install pathos (drop-in replacement for std-lib multiprocessing)
 
-# ------------------------------------------------ read data ---------------------
+# ------------------------------------------------ data -------------------------------------------------
 df = pd.read_csv('btc_daily.csv', parse_dates=['date'])
+df = df.sort_values('date').reset_index(drop=True)
 
-# ---- MACD (proper warm-up) ----------------------------------------------------
-ema12 = df['close'].ewm(span=12, min_periods=12, adjust=False).mean()
-ema26 = df['close'].ewm(span=26, min_periods=26, adjust=False).mean()
+# ------------------------------------------------ MACD -------------------------------------------------
+ema12 = df['close'].ewm(span=12, adjust=False).mean()
+ema26 = df['close'].ewm(span=26, adjust=False).mean()
 macd  = ema12 - ema26
-signal = macd.ewm(span=9, min_periods=9, adjust=False).mean()
+signal = macd.ewm(span=9, adjust=False).mean()
 
-# 1/-1 on cross
-cross = np.where((macd > signal) & (macd.shift() <= signal.shift()),  1,
-                np.where((macd < signal) & (macd.shift() >= signal.shift()), -1, 0))
-pos = pd.Series(cross, index=df.index).replace(0, np.nan).ffill().fillna(0)
+#  1 / -1 / 0  on cross
+pos = np.where((macd>signal)&(macd.shift()<=signal.shift()),  1,
+        np.where((macd<signal)&(macd.shift()>=signal.shift()), -1, np.nan))
+pos = pd.Series(pos, index=df.index).ffill().fillna(0)
 
-# =====================  SINGLE RUN WITH 6.7 % STOP  ===========================
-STOP_PCT = 6.7
-LEVERAGE = 5.0                                        # << 5× leverage
-curve = [10000]
-in_pos = 0
-entry_p = None
-entry_d = None
-trades = []
+# ------------------------------------------- single back-test -----------------------------------------
+def one_run(stop_pct, leverage):
+    """
+    Returns a dict with all key metrics for ONE (stop, leverage) pair.
+    Vectorised core – no python loop over 3650 rows.
+    """
+    stop_frac = stop_pct / 100
+    # 1. raw signal position
+    raw_pos = pos * leverage
+    # 2. stop-trigger mask
+    long_stop  = (df['low']  <= df['close'].shift() * (1 - stop_frac)) & (raw_pos > 0)
+    short_stop = (df['high'] >= df['close'].shift() * (1 + stop_frac)) & (raw_pos < 0)
+    stopped = long_stop | short_stop
+    # 3. set position to 0 on stopped days
+    pos_adj = raw_pos.where(~stopped, 0)
+    # 4. daily returns
+    day_ret = df['close'].pct_change() * pos_adj.shift().fillna(0)
+    curve = (1 + day_ret).cumprod()
+    curve.iloc[0] = 1
+    # 5. trade list (entries & exits)
+    flat = (pos_adj == 0)
+    entries = (~flat & flat.shift(1).fillna(True))
+    exits   = (flat & (~flat).shift(1).fillna(True))
+    trades_ret = []
+    for en, ex in zip(df.index[entries], df.index[exits]):
+        trades_ret.append(day_ret.loc[en:ex].sum())
+    trades_ret = pd.Series(trades_ret)
+    # 6. metrics
+    n_years = (df['date'].iloc[-1] - df['date'].iloc[0]).days / 365.25
+    cagr = curve.iloc[-1] ** (1/n_years) - 1
+    vol  = day_ret.std() * np.sqrt(252)
+    sharpe = cagr / vol if vol else np.nan
+    dd = (curve / curve.cummax() - 1)
+    maxdd = dd.min()
+    calmar = cagr / abs(maxdd) if maxdd else np.nan
+    win_rate = (trades_ret > 0).mean() if len(trades_ret) else np.nan
+    avg_win  = trades_ret[trades_ret>0].mean()
+    avg_loss = trades_ret[trades_ret<0].mean()
+    payoff   = abs(avg_win/avg_loss) if pd.notna(avg_loss) and avg_loss!=0 else np.nan
+    pf = trades_ret[trades_ret>0].sum() / abs(trades_ret[trades_ret<0].sum()) if trades_ret[trades_ret<0].sum() else np.nan
+    exp = win_rate*avg_win - (1-win_rate)*abs(avg_loss) if pd.notna(avg_win) and pd.notna(avg_loss) else np.nan
+    kelly = exp / trades_ret.var() if trades_ret.var()>0 else np.nan
+    time_mkt = (pos_adj != 0).mean()
+    tail = np.percentile(day_ret.dropna(),95) / abs(np.percentile(day_ret.dropna(),5)) if len(day_ret.dropna()) else np.nan
+    tpy = len(trades_ret) / n_years
+    lose_streak = (trades_ret < 0).astype(int)
+    max_lose = lose_streak.groupby(lose_streak.diff().ne(0).cumsum()).sum().max() if len(lose_streak) else 0
 
-for i in range(1, len(df)):
-    p_prev = df['close'].iloc[i-1]
-    p_now  = df['close'].iloc[i]
-    pos_i  = pos.iloc[i]
+    return dict(
+        stop=stop_pct, lev=leverage,
+        CAGR=cagr, VOL=vol, Sharpe=sharpe,
+        MaxDD=maxdd, Calmar=calmar,
+        WinRate=win_rate, Payoff=payoff, PF=pf,
+        Exp=exp, Kelly=kelly, TimeMkt=time_mkt,
+        Tail=tail, TPY=tpy, MaxLS=max_lose
+    )
 
-    # enter
-    if in_pos == 0 and pos_i != 0:
-        in_pos, entry_p, entry_d = pos_i, p_now, df['date'].iloc[i]
+# ------------------------------------------- parameter grid -------------------------------------------
+stops = np.arange(0.5, 8.05, 0.1).round(1)   # 0.5 … 8.0
+levs  = [1,2,3,4,5]
 
-    # ---------- 6.7 % intrabar stop ----------
-    if in_pos != 0:
-        if in_pos == 1:                           # long
-            stop_price = entry_p * (1 - STOP_PCT/100)
-            if df['low'].iloc[i] <= stop_price:
-                trades.append((entry_d, df['date'].iloc[i], -STOP_PCT/100 * LEVERAGE))
-                in_pos = 0
-        else:                                     # short
-            stop_price = entry_p * (1 + STOP_PCT/100)
-            if df['high'].iloc[i] >= stop_price:
-                trades.append((entry_d, df['date'].iloc[i], -STOP_PCT/100 * LEVERAGE))
-                in_pos = 0
+# ------------------------------------------- run (parallel) -------------------------------------------
+if __name__ == '__main__':
+    tasks = list(product(stops, levs))
+    pool  = mp.Pool(processes=mp.cpu_count())
+    print(f'scanning {len(tasks)} combinations …')
+    tic  = time.time()
+    recs = pool.starmap(one_run, tasks)
+    pool.close(); pool.join()
+    print(f'done in {time.time()-tic:.1f}s')
 
-    # exit on opposite MACD cross
-    if in_pos != 0 and pos_i == -in_pos:
-        ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
-        trades.append((entry_d, df['date'].iloc[i], ret))
-        in_pos = pos_i
-        entry_p, entry_d = p_now, df['date'].iloc[i]
-
-    # equity update
-    curve.append(curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE))
-
-curve = pd.Series(curve, index=df.index)
-
-# ---------------------------  FULL METRICS  -----------------------------------
-daily_ret = curve.pct_change().dropna()
-trades_ret = pd.Series([t[2] for t in trades])
-n_years = (df['date'].iloc[-1] - df['date'].iloc[0]).days / 365.25
-
-cagr = (curve.iloc[-1] / curve.iloc[0]) ** (1 / n_years) - 1
-vol  = daily_ret.std() * np.sqrt(252)
-sharpe = cagr / vol if vol else np.nan
-drawdown = curve / curve.cummax() - 1
-maxdd = drawdown.min()
-calmar = cagr / abs(maxdd) if maxdd else np.nan
-
-wins   = trades_ret[trades_ret > 0]
-losses = trades_ret[trades_ret < 0]
-win_rate = len(wins) / len(trades_ret) if trades_ret.size else 0
-avg_win  = wins.mean()   if len(wins)   else 0
-avg_loss = losses.mean() if len(losses) else 0
-payoff   = abs(avg_win / avg_loss) if avg_loss else np.nan
-profit_factor = wins.sum() / abs(losses.sum()) if losses.sum() else np.nan
-expectancy = win_rate * avg_win - (1 - win_rate) * abs(avg_loss)
-
-kelly = expectancy / trades_ret.var() if trades_ret.var() > 0 else np.nan
-
-time_in_mkt = (pos != 0).mean()
-tail_ratio = (np.percentile(daily_ret, 95) /
-              abs(np.percentile(daily_ret, 5))) if daily_ret.size else np.nan
-trades_per_year = len(trades) / n_years
-lose_streak = (trades_ret < 0).astype(int)
-max_lose_streak = lose_streak.groupby(
-                      lose_streak.diff().ne(0).cumsum()).sum().max()
-
-# ---------------------------  PRINT  ------------------------------------------
-final_macd = curve.iloc[-1]
-final_hold = (df['close'].iloc[-1] / df['close'].iloc[0]) * 10000
-worst      = min(trades, key=lambda x: x[2])
-
-print(f'\n===== MACD + {STOP_PCT}% intrabar stop-loss ({LEVERAGE}× lev) =====')
-print(f'MACD final:        €{final_macd:,.0f}')
-print(f'Buy & Hold final:  €{final_hold:,.0f}')
-print(f'Worst trade:       {worst[2]*100:.2f}% (exit {worst[1].strftime("%Y-%m-%d")})')
-print(f'Max drawdown:      {maxdd*100:.2f}%')
-time.sleep(0.01)
-
-print('\n----- full performance stats -----')
-print(f'CAGR:               {cagr*100:6.2f}%')
-print(f'Ann. volatility:    {vol*100:6.2f}%')
-print(f'Sharpe (rf=0):      {sharpe:6.2f}')
-print(f'Max drawdown:       {maxdd*100:6.2f}%')
-print(f'Calmar:             {calmar:6.2f}')
-print(f'Trades/year:        {trades_per_year:6.1f}')
-print(f'Win-rate:           {win_rate*100:6.1f}%')
-print(f'Average win:        {avg_win*100:6.2f}%')
-time.sleep(0.01)
-print(f'Average loss:       {avg_loss*100:6.2f}%')
-print(f'Payoff ratio:       {payoff:6.2f}')
-print(f'Profit factor:      {profit_factor:6.2f}')
-print(f'Expectancy/trade:   {expectancy*100:6.2f}%')
-print(f'Kelly fraction:     {kelly*100:6.2f}%')
-print(f'Time in market:     {time_in_mkt*100:6.1f}%')
-print(f'Tail ratio (95/5):  {tail_ratio:6.2f}')
-print(f'Max lose streak:    {max_lose_streak:6.0f}')
-time.sleep(0.01)
-
-# ---------------------  DAY-BY-DAY EQUITY CURVE  ------------------------------
-print('\n----- equity curve (day-by-day) -----')
-print('date       close      equity')
-for idx, row in df.iterrows():
-    print(f"{row['date'].strftime('%Y-%m-%d')}  "
-          f"{row['close']:>10.2f}  "
-          f"{curve[idx]:>10.2f}")
-    time.sleep(0.01)
+    # save
+    pd.DataFrame(recs).to_csv('MACD_scan_stop_lev.csv', index=False, float_format='%.4f')
+    print('saved → MACD_scan_stop_lev.csv')
+  
