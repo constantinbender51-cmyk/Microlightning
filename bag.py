@@ -40,7 +40,7 @@ def build_forecaster(X, y, n_trees=500, max_depth=None,
     base = DecisionTreeClassifier(max_features=None,
                                   max_depth=max_depth,
                                   random_state=random_state)
-    bag = BaggingClassifier(base_estimator=base,
+    bag = BaggingClassifier(estimator=base,
                             n_estimators=n_trees,
                             max_samples=1.0,
                             bootstrap=True,
