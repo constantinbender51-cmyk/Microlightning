@@ -47,22 +47,68 @@ for i in range(1, len(df)):
 
 curve = pd.Series(curve, index=df.index)
 
-# ---- metrics -----------------------------------------------------------------
+# ---- basic metrics ------------------------------------------------------------
 final_macd = curve.iloc[-1]
 final_hold = (df['close'].iloc[-1] / df['close'].iloc[0]) * 10000
 worst      = min(trades, key=lambda x: x[2])
 maxbal     = curve.cummax()
-# ---- month-end balance -------------------------------------------------------
-month_end_curve = (
-    curve
-    .resample('M')          # calendar month end
-    .last()                 # equity on that day
-    .iloc[:-1]              # drop the still-open current month
-)
 
 print(f"MACD+2%SL final: €{final_macd:,.0f}")
 print(f"B&H final:       €{final_hold:,.0f}")
 print(f"Worst trade:     {worst[2]*100:.1f}% (exit {worst[1].strftime('%Y-%m-%d')})")
 print(f"Max drawdown:    {(curve/maxbal - 1).min()*100:.1f}%")
-print('\nEquity at month-end:')
-print(month_end_curve.to_string())
+
+# ------------------------------------------------ extra metrics -------------
+daily_ret = curve.pct_change().dropna()
+trades_ret = pd.Series([t[2] for t in trades])   # already in % terms
+n_years = (df['date'].iloc[-1] - df['date'].iloc[0]).days / 365.25
+
+cagr = (curve.iloc[-1] / curve.iloc[0]) ** (1 / n_years) - 1
+vol = daily_ret.std() * np.sqrt(252)
+sharpe = cagr / vol if vol else np.nan
+
+drawdown = curve / curve.cummax() - 1
+maxdd = drawdown.min()
+calmar = cagr / abs(maxdd) if maxdd else np.nan
+
+wins = trades_ret[trades_ret > 0]
+losses = trades_ret[trades_ret < 0]
+win_rate = len(wins) / len(trades_ret) if trades_ret.size else 0
+avg_win = wins.mean() if len(wins) else 0
+avg_loss = losses.mean() if len(losses) else 0
+payoff = abs(avg_win / avg_loss) if avg_loss else np.nan
+profit_factor = wins.sum() / abs(losses.sum()) if losses.sum() else np.nan
+expectancy = win_rate * avg_win - (1 - win_rate) * abs(avg_loss)
+
+# Kelly
+if trades_ret.var() > 0:
+    kelly = expectancy / trades_ret.var()
+else:
+    kelly = np.nan
+
+time_in_mkt = (pos != 0).mean()
+tail_ratio = np.percentile(daily_ret, 95) / abs(np.percentile(daily_ret, 5)) \
+             if daily_ret.size else np.nan
+trades_per_year = len(trades) / n_years
+max_lose_streak = (trades_ret < 0).astype(int).groupby(
+                    (trades_ret < 0).astype(int).diff().ne(0).cumsum()
+                  ).sum().max()
+
+# ------------------------------- print --------------------------------------
+print("\n----- extra performance stats -----")
+print(f"CAGR:               {cagr*100:6.2f}%")
+print(f"Ann. volatility:    {vol*100:6.2f}%")
+print(f"Sharpe (rf=0):      {sharpe:6.2f}")
+print(f"Max drawdown:       {maxdd*100:6.2f}%")
+print(f"Calmar:             {calmar:6.2f}")
+print(f"Trades/year:        {trades_per_year:6.1f}")
+print(f"Win-rate:           {win_rate*100:6.1f}%")
+print(f"Average win:        {avg_win*100:6.2f}%")
+print(f"Average loss:       {avg_loss*100:6.2f}%")
+print(f"Payoff ratio:       {payoff:6.2f}")
+print(f"Profit factor:      {profit_factor:6.2f}")
+print(f"Expectancy/trade:   {expectancy*100:6.2f}%")
+print(f"Kelly fraction:     {kelly*100:6.2f}%")
+print(f"Time in market:     {time_in_mkt*100:6.1f}%")
+print(f"Tail ratio (95/5):  {tail_ratio:6.2f}")
+print(f"Max lose streak:    {max_lose_streak:6.0f}")
