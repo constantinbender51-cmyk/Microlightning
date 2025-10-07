@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import time
-import numpy as np
 
 # ------------------------------------------------ read data ---------------------
 df = pd.read_csv('btc_daily.csv', parse_dates=['date'])
