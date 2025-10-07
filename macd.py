@@ -101,6 +101,6 @@ if __name__ == '__main__':
     with open('MACD_scan_stop_lev.csv') as f:
         for line in f:
             print(line.rstrip())
-            time.sleep(0.01)
+            time.sleep(0.02)
                 
   
