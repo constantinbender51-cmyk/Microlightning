@@ -41,9 +41,10 @@ def one_run(stop_pct, leverage):
     curve = (1 + day_ret).cumprod()
     curve.iloc[0] = 1
     # 5. trade list (entries & exits)
-    flat = (pos_adj == 0)
-    entries = (~flat & flat.shift(1).fillna(True))
-    exits   = (flat & (~flat).shift(1).fillna(True))
+    flat = (pos_adj == 0).astype(bool)          # <- explicit bool dtype
+    entries = (~flat) & (flat.shift().fillna(True))
+    exits   = flat & (~flat.shift().fillna(False))
+
     trades_ret = []
     for en, ex in zip(df.index[entries], df.index[exits]):
         trades_ret.append(day_ret.loc[en:ex].sum())
