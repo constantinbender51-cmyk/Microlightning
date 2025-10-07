@@ -1,5 +1,8 @@
 import pandas as pd
 import numpy as np
+# ------------------------------------------------ live-print equity curve -----
+import time
+
 
 df = pd.read_csv('btc_daily.csv', parse_dates=['date'])
 
@@ -112,3 +115,11 @@ print(f"Kelly fraction:     {kelly*100:6.2f}%")
 print(f"Time in market:     {time_in_mkt*100:6.1f}%")
 print(f"Tail ratio (95/5):  {tail_ratio:6.2f}")
 print(f"Max lose streak:    {max_lose_streak:6.0f}")
+print("\n----- equity curve (day-by-day) -----")
+print("date       close      equity")
+for idx, row in df.iterrows():
+    print(f"{row['date'].strftime('%Y-%m-%d')}  "
+          f"{row['close']:>10.2f}  "
+          f"{curve[idx]:>10.2f}")
+    time.sleep(0.01)          # 0.01 s ≈ 10 ms delay between rows
+  
