@@ -88,7 +88,7 @@ curve = pd.Series(curve, index=df.index)
 # ---------------------------  FULL METRICS  -----------------------------------
 daily_ret = curve.pct_change().dropna()
 trades_ret = pd.Series([t[2] for t in trades])
-n_years = (df['date'].iloc[-1] - df['date'.iloc[0]).days / 365.25
+n_years = (df['date'].iloc[-1] - df['date'].iloc[0]).days / 365.25
 
 cagr = (curve.iloc[-1] / curve.iloc[0]) ** (1 / n_years) - 1
 vol  = daily_ret.std() * np.sqrt(252)
