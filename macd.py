@@ -49,7 +49,7 @@ for i in range(1, len(df)):
     if in_pos != 0 and pos_i == -in_pos:
         ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
         if stp == True:
-          trades.append((entry_d, df['date'].iloc[i], -stp_pct)
+          trades.append((entry_d, df['date'].iloc[i], -stp_pct))
         else:
           trades.append((entry_d, df['date'].iloc[i], ret))
         in_pos = 0
