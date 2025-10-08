@@ -40,22 +40,33 @@ for i in range(1, len(df)):
         entry_d    = df['date'].iloc[i]
         block_side = 0          # reset block once we are in again
 
-    # ----- 6.7 % intrabar stop ------------------------------------------------
+        # ---------- 6.7 % intrabar stop ----------
     if in_pos != 0:
-        if in_pos == 1:                       # long
+        if in_pos == 1:                           # long
             stop_price = entry_p * (1 - STOP_PCT/100)
             if df['low'].iloc[i] <= stop_price:
                 trades.append((entry_d, df['date'].iloc[i],
                                -STOP_PCT/100 * LEVERAGE))
                 in_pos     = 0
-                block_side = 1                # block new longs until next cross
-        else:                                 # short
+                block_side = 1
+                continue                      # <-- skip cross logic this bar
+        else:                                     # short
             stop_price = entry_p * (1 + STOP_PCT/100)
             if df['high'].iloc[i] >= stop_price:
                 trades.append((entry_d, df['date'].iloc[i],
                                -STOP_PCT/100 * LEVERAGE))
                 in_pos     = 0
-                block_side = -1               # block new shorts until next cross
+                block_side = -1
+                continue                      # <-- skip cross logic this bar
+
+    # exit on opposite MACD cross (only reached if still in_pos)
+    if in_pos != 0 and pos_i == -in_pos:
+        ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
+        trades.append((entry_d, df['date'].iloc[i], ret))
+        in_pos     = pos_i
+        entry_p    = p_now
+        entry_d    = df['date'].iloc[i]
+        block_side = 0
 
     # ----- exit on opposite MACD cross ----------------------------------------
     if in_pos != 0 and pos_i == -in_pos:
