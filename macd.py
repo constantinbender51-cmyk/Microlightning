@@ -95,7 +95,7 @@ final_macd = curve.iloc[-1]
 final_hold = (df['close'].iloc[-1] / df['close'].iloc[0]) * 10000
 worst      = min(trades, key=lambda x: x[2])
 
-print(f'\n===== MACD + 6.7% stop (v2, {LEVERAGE}× lev) =====')
+print(f'\n===== MACD + 6.7% stop (v1, {LEVERAGE}× lev) =====')
 print(f'MACD final:        €{final_macd:,.0f}')
 print(f'Buy & Hold final:  €{final_hold:,.0f}')
 print(f'Worst trade:       {worst[2]*100:.2f}% (exit {worst[1].strftime("%Y-%m-%d")})')
