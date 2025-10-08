@@ -7,7 +7,7 @@ MACD cross-over bot for Kraken-Futures inverse perpetual PF_XBTUSD.
    - Fetch 200-day OHLC, compute MACD, print last 5
    - Get accounts.flex.portfolioValue
    - Get tickers → PF_XBTUSD markPrice
-   - Send tiny MARKET order (5×) + 2% stop
+   - Send tiny MARKET order (3.3×) + 2.9% stop
    - Immediately flatten + cancel all
 1. Enter daily loop: check signal at 00:05 UTC
 """
@@ -32,8 +32,8 @@ SYMBOL_FUTS_LC = "pf_xbtusd"   # lower-case for send_order only
 SYMBOL_OHLC = "XBTUSD"
 INTERVAL = 1440
 MACD_FAST, MACD_SLOW, MACD_SIG = 12, 26, 9
-LEVERAGE = 5
-STOP_PCT = 0.02
+LEVERAGE = 3.3                 # <— CHANGED
+STOP_PCT = 0.029               # <— CHANGED
 STATE_FILE = Path("macd_state.json")
 TEST_SIZE_BTC = 0.0001
 
