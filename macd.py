@@ -47,6 +47,7 @@ for i in range(1, len(df)):
         entry_p = p_now
         entry_d = df['date'].iloc[i]
         stp = False
+      print('\n----- EMTRY -----')
 
     # ----- exit on opposite cross ---------------------------------------------
     if in_pos != 0 and pos_i == -in_pos:
@@ -57,6 +58,7 @@ for i in range(1, len(df)):
           trades.append((entry_d, df['date'].iloc[i], ret))
         in_pos = 0
         stp = False
+      print('\n----- CROSS -----')
 
     # ----- equity update -------------------------------------------------------
     if stp == True:
