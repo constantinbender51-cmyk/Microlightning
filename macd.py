@@ -57,9 +57,9 @@ for i in range(1, len(df)):
           trades.append((entry_d, df['date'].iloc[i], -stp_pct*LEVERAGE))
         else:
           trades.append((entry_d, df['date'].iloc[i], ret))
-          if ret > 0:
+          if ret >= 0:
             stp_cnt=0
-          else if ret<0:
+          else:
             stp_cnt=stp_cnt+1
             if stp_cnt_max<stp_cnt:
               stp_cnt_max=stp_cnt_max
