@@ -16,7 +16,7 @@ cross = np.where((macd > signal) & (macd.shift() <= signal.shift()),  1,
                 np.where((macd < signal) & (macd.shift() >= signal.shift()), -1, 0))
 pos = pd.Series(cross, index=df.index).replace(0, np.nan).ffill().fillna(0)
 
-# =====================  STOP-LOSS VERSION 1 =============================
+# =====================  STOP-LOSS VERSION 2 =============================
 LEVERAGE = 3.0
 curve    = [10000]
 in_pos   = 0
@@ -32,6 +32,8 @@ for i in range(1, len(df)):
     high_i = df['high'].iloc[i]
     pos_i  = pos.iloc[i]
 
+    re_entry_flag = False   # mark if we exited via stop this bar
+
     # ----- 1. STOP-LOSS EXIT (highest priority) ----------------------------
     if in_pos != 0:
         if (in_pos == 1 and low_i <= stop_p) or (in_pos == -1 and high_i >= stop_p):
@@ -39,7 +41,7 @@ for i in range(1, len(df)):
             trades.append((entry_d, df['date'].iloc[i], ret))
             curve.append(curve[-1] * (1 + ret))
             in_pos, entry_p, entry_d, stop_p = 0, None, None, None
-            # fall through – allow same-bar entry below
+            re_entry_flag = True        # we are flat; may enter later this bar
 
     # ----- 2. MACD opposite-cross exit (only if still in) -------------------
     if in_pos != 0 and pos_i == -in_pos:
@@ -48,17 +50,17 @@ for i in range(1, len(df)):
         curve.append(curve[-1] * (1 + ret))
         in_pos, entry_p, entry_d, stop_p = 0, None, None, None
 
-    # ----- 3. NEW ENTRY (flat after stop or flat after cross) ---------------
-    if in_pos == 0 and pos_i != 0:
+    # ----- 3. NEW ENTRY (flat after stop or cross) --------------------------
+    if in_pos == 0 and pos_i != 0:          # pos_i uses close – still valid
         in_pos  = pos_i
         entry_p = p_now
         entry_d = df['date'].iloc[i]
         stop_p  = entry_p * (1 - 0.067) if in_pos == 1 else entry_p * (1 + 0.067)
 
-    # ----- 4. EQUITY UPDATE --------------------------------------------------
+    # ----- 4. EQUITY UPDATE -------------------------------------------------
     if in_pos != 0:
         curve.append(curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE))
-    else:                       # flat day
+    else:
         curve.append(curve[-1])
 
 curve = pd.Series(curve, index=df.index)
@@ -97,7 +99,7 @@ final_macd = curve.iloc[-1]
 final_hold = (df['close'].iloc[-1] / df['close'].iloc[0]) * 10000
 worst      = min(trades, key=lambda x: x[2])
 
-print(f'\n===== MACD + 6.7% stop (v1, {LEVERAGE}× lev) =====')
+print(f'\n===== MACD + 6.7% stop (v2, {LEVERAGE}× lev) =====')
 print(f'MACD final:        €{final_macd:,.0f}')
 print(f'Buy & Hold final:  €{final_hold:,.0f}')
 print(f'Worst trade:       {worst[2]*100:.2f}% (exit {worst[1].strftime("%Y-%m-%d")})')
