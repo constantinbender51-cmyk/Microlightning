@@ -41,7 +41,8 @@ for i in range(1, len(df)):
         entry_p = p_now
         entry_d = df['date'].iloc[i]
         stp = False
-        print('\n----- EMTRY -----')
+        print(f"ENTRY {(entry_p*(1-stp_pct) / entry_p - 1) * in_pos * LEVERAGE}  ")
+
 
     # ----- exit on opposite cross ---------------------------------------------
     if in_pos != 0 and pos_i == -in_pos:
@@ -52,18 +53,20 @@ for i in range(1, len(df)):
           trades.append((entry_d, df['date'].iloc[i], ret))
         in_pos = 0
         stp = False
-        print('\n----- CROSS -----')
+        print(f"CROSS TRADE {(entry_p*(1-stp_pct) / entry_p - 1) * in_pos * LEVERAGE}  ")
 
     # ----- equity update -------------------------------------------------------
     if stp == True:
       curve.append(curve[-1] * (1 + (entry_p*(1-stp_pct)/entry_p - 1) * in_pos * LEVERAGE))
       days_stp=days_stp+1
       print(f"{df['date'].iloc[i].strftime('%Y-%m-%d')}  "
-          f"STOP {df['close'].iloc[i]:>10.2f}  ")
+          f"STOP {df['close'].iloc[i]:>10.2f}  "
+          f"CURVE {curve[-1] * (1 + (entry_p*(1-stp_pct)/entry_p - 1) * in_pos * LEVERAGE)}")
     else:
       curve.append(curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE))
       print(f"{df['date'].iloc[i].strftime('%Y-%m-%d')}  "
-          f" {df['close'].iloc[i]:>10.2f}  ")
+          f" {df['close'].iloc[i]:>10.2f}  "
+          f"CURVE {curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE)}")
 
 curve = pd.Series(curve, index=df.index)
 
