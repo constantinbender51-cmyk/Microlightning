@@ -16,8 +16,7 @@ cross = np.where((macd > signal) & (macd.shift() <= signal.shift()),  1,
                 np.where((macd < signal) & (macd.shift() >= signal.shift()), -1, 0))
 pos = pd.Series(cross, index=df.index).replace(0, np.nan).ffill().fillna(0)
 
-# =====================  SINGLE RUN WITH 6.7 % STOP  ===========================
-STOP_PCT = 6.7
+# =====================  SINGLE RUN (NO STOP-LOSS) =============================
 LEVERAGE = 3.0
 curve    = [10000]
 in_pos   = 0
@@ -25,55 +24,25 @@ entry_p  = None
 entry_d  = None
 trades   = []
 
-# 0: no block,  1: block longs, -1: block shorts
-block_side = 0
-
 for i in range(1, len(df)):
     p_prev = df['close'].iloc[i-1]
     p_now  = df['close'].iloc[i]
     pos_i  = pos.iloc[i]
 
     # ----- entry logic --------------------------------------------------------
-    if in_pos == 0 and pos_i != 0 and pos_i != block_side:
-        in_pos     = pos_i
-        entry_p    = p_now
-        entry_d    = df['date'].iloc[i]
-        block_side = 0          # reset block once we are in again    # ----- 1.  stop-loss (intra-bar) ------------------------------------------
-    stopped = False
-    if in_pos != 0:
-        if in_pos == 1:                       # long
-            stop_price = entry_p * (1 - STOP_PCT/100)
-            if df['low'].iloc[i] <= stop_price:
-                trades.append((entry_d, df['date'].iloc[i],
-                               -STOP_PCT/100 * LEVERAGE))
-                in_pos     = 0
-                block_side = 1
-                stopped = True
-        else:                                 # short
-            stop_price = entry_p * (1 + STOP_PCT/100)
-            if df['high'].iloc[i] >= stop_price:
-                trades.append((entry_d, df['date'].iloc[i],
-                               -STOP_PCT/100 * LEVERAGE))
-                in_pos     = 0
-                block_side = -1
-                stopped = True
-
-    # ----- 2.  cross-based exit OR immediate re-entry -------------------------
-    if in_pos != 0 and pos_i == -in_pos:          # normal cross exit
-        ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
-        trades.append((entry_d, df['date'].iloc[i], ret))
-        in_pos  = 0                                # now flat
-
-    # if we are flat (either via stop or via cross) and a cross is present → enter
-    if in_pos == 0 and pos_i != 0 and pos_i != block_side:
+    if in_pos == 0 and pos_i != 0:
         in_pos  = pos_i
         entry_p = p_now
         entry_d = df['date'].iloc[i]
-        block_side = 0
 
-    # ----- 3.  equity update (always) -----------------------------------------
+    # ----- exit on opposite cross ---------------------------------------------
+    if in_pos != 0 and pos_i == -in_pos:
+        ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
+        trades.append((entry_d, df['date'].iloc[i], ret))
+        in_pos = 0
+
+    # ----- equity update -------------------------------------------------------
     curve.append(curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE))
-
 
 curve = pd.Series(curve, index=df.index)
 
@@ -113,7 +82,7 @@ final_macd = curve.iloc[-1]
 final_hold = (df['close'].iloc[-1] / df['close'].iloc[0]) * 10000
 worst      = min(trades, key=lambda x: x[2])
 
-print(f'\n===== MACD + {STOP_PCT}% intrabar stop-loss ({LEVERAGE}× lev) =====')
+print(f'\n===== MACD (no stop-loss, {LEVERAGE}× lev) =====')
 print(f'MACD final:        €{final_macd:,.0f}')
 print(f'Buy & Hold final:  €{final_hold:,.0f}')
 print(f'Worst trade:       {worst[2]*100:.2f}% (exit {worst[1].strftime("%Y-%m-%d")})')
