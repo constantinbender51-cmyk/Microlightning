@@ -25,6 +25,7 @@ entry_d  = None
 trades   = []
 stp = False
 stp_pct = 0.067
+days_stp = 0
 
 for i in range(1, len(df)):
     p_prev = df['close'].iloc[i-1]
@@ -53,6 +54,7 @@ for i in range(1, len(df)):
     # ----- equity update -------------------------------------------------------
     if stp == True:
       curve.append(curve[-1] * (1 + (entry_p*(1-stp_pct)/entry_p - 1) * in_pos * LEVERAGE))
+      days_stp++
     else:
       curve.append(curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE))
 
@@ -81,7 +83,7 @@ expectancy = win_rate * avg_win - (1 - win_rate) * abs(avg_loss)
 
 kelly = expectancy / trades_ret.var() if trades_ret.var() > 0 else np.nan
 
-time_in_mkt = (pos != 0).mean()
+time_in_mkt = 1-((1-(pos != 0).mean())*len(df)+days_stp)/len(df)
 tail_ratio = (np.percentile(daily_ret, 95) /
               abs(np.percentile(daily_ret, 5))) if daily_ret.size else np.nan
 trades_per_year = len(trades) / n_years
