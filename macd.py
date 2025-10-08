@@ -131,11 +131,10 @@ print(f'Tail ratio (95/5):  {tail_ratio:6.2f}')
 print(f'Max lose streak:    {max_lose_streak:6.0f}')
 time.sleep(1)
 
-# ---------------------  DAY-BY-DAY EQUITY CURVE  ------------------------------
+# ---------------------  DAY-BY-DAY EQUITY CURVE (first 10 rows) ---------------
 print('\n----- equity curve (day-by-day) -----')
 print('date       close      equity')
-for idx, row in df.iterrows():
+for idx, row in df.head(10).iterrows():          # <-- only first 10 rows
     print(f"{row['date'].strftime('%Y-%m-%d')}  "
           f"{row['close']:>10.2f}  "
           f"{curve[idx]:>10.2f}")
-    time.sleep(0.2)
