@@ -34,6 +34,7 @@ for i in range(1, len(df)):
     
     if in_pos != 0 and ((entry_p/df['high'].iloc[i]-1)*in_pos>=stp_pct or (entry_p/df['low'].iloc[i]-1)*in_pos>=stp_pct):
       stp = True
+      stp_price=curve[0] * (1 + (entry_p*(1-stp_pct)/entry_p - 1) * in_pos * LEVERAGE)
       
     # ----- entry logic --------------------------------------------------------
     if in_pos == 0 and pos_i != 0:
@@ -41,14 +42,14 @@ for i in range(1, len(df)):
         entry_p = p_now
         entry_d = df['date'].iloc[i]
         stp = False
-        print(f"ENTRY {(entry_p*(1-stp_pct) / entry_p - 1) * in_pos * LEVERAGE}  ")
+        print(f"ENTRY {in_pos}  ")
 
 
     # ----- exit on opposite cross ---------------------------------------------
     if in_pos != 0 and pos_i == -in_pos:
         ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
         if stp == True:
-          trades.append((entry_d, df['date'].iloc[i], (entry_p*(1-stp_pct) / entry_p - 1) * in_pos * LEVERAGE))
+          trades.append((entry_d, df['date'].iloc[i], stp_price/curve[0]-1)
         else:
           trades.append((entry_d, df['date'].iloc[i], ret))
         in_pos = 0
@@ -57,7 +58,7 @@ for i in range(1, len(df)):
 
     # ----- equity update -------------------------------------------------------
     if stp == True:
-      curve.append(curve[-1] * (1 + (entry_p*(1-stp_pct)/entry_p - 1) * in_pos * LEVERAGE))
+      curve.append(stp_price)
       days_stp=days_stp+1
       print(f"{df['date'].iloc[i].strftime('%Y-%m-%d')}  "
           f"STOP {df['close'].iloc[i]:>10.2f}  "
