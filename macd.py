@@ -16,9 +16,9 @@ cross = np.where((macd > signal) & (macd.shift() <= signal.shift()),  1,
                 np.where((macd < signal) & (macd.shift() >= signal.shift()), -1, 0))
 pos = pd.Series(cross, index=df.index).replace(0, np.nan).ffill().fillna(0)
 
-# =====================  STOP-LOSS VERSION 2 =============================
+# =====================  STOP-LOSS VERSION 1  =============================
 LEVERAGE = 3.0
-curve    = [10000]
+curve    = [10000] * len(df)   # 1. pre-allocate
 in_pos   = 0
 entry_p  = None
 entry_d  = None
@@ -32,37 +32,33 @@ for i in range(1, len(df)):
     high_i = df['high'].iloc[i]
     pos_i  = pos.iloc[i]
 
-    re_entry_flag = False   # mark if we exited via stop this bar
-
-    # ----- 1. STOP-LOSS EXIT (highest priority) ----------------------------
+    # 1. STOP-LOSS EXIT
     if in_pos != 0:
         if (in_pos == 1 and low_i <= stop_p) or (in_pos == -1 and high_i >= stop_p):
             ret = (stop_p / entry_p - 1) * in_pos * LEVERAGE
             trades.append((entry_d, df['date'].iloc[i], ret))
-            curve.append(curve[-1] * (1 + ret))
+            curve[i] = curve[i-1] * (1 + ret)          # 2. write, not append
             in_pos, entry_p, entry_d, stop_p = 0, None, None, None
-            re_entry_flag = True        # we are flat; may enter later this bar
+        else:
+            curve[i] = curve[i-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE)
+    else:
+        curve[i] = curve[i-1]   # flat day
 
-    # ----- 2. MACD opposite-cross exit (only if still in) -------------------
+    # 2. MACD cross exit (only if still in)
     if in_pos != 0 and pos_i == -in_pos:
         ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
         trades.append((entry_d, df['date'].iloc[i], ret))
-        curve.append(curve[-1] * (1 + ret))
+        curve[i] = curve[i-1] * (1 + ret)
         in_pos, entry_p, entry_d, stop_p = 0, None, None, None
 
-    # ----- 3. NEW ENTRY (flat after stop or cross) --------------------------
-    if in_pos == 0 and pos_i != 0:          # pos_i uses close – still valid
+    # 3. NEW ENTRY (flat after stop or cross)
+    if in_pos == 0 and pos_i != 0:
         in_pos  = pos_i
         entry_p = p_now
         entry_d = df['date'].iloc[i]
         stop_p  = entry_p * (1 - 0.067) if in_pos == 1 else entry_p * (1 + 0.067)
 
-    # ----- 4. EQUITY UPDATE -------------------------------------------------
-    if in_pos != 0:
-        curve.append(curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE))
-    else:
-        curve.append(curve[-1])
-
+# 3. build Series once
 curve = pd.Series(curve, index=df.index)
 
 # ---------------------------  FULL METRICS  (identical) -----------------------
