@@ -34,9 +34,14 @@ for i in range(1, len(df)):
     
     if in_pos != 0 and ((entry_p/df['high'].iloc[i]-1)*in_pos>=stp_pct or (entry_p/df['low'].iloc[i]-1)*in_pos>=stp_pct):
       stp = True
-      print(f"{df['high'].iloc[i].strftime('%Y-%m-%d')}  "
-          f"{df['close'].iloc[i]:>10.2f}  "
-          f"{df['close'].iloc[i]:>10.2f}")
+      print(f"{df['date'].iloc[i].strftime('%Y-%m-%d')}  "
+          f"STOP {df['close'].iloc[i]:>10.2f}  ")
+      time.sleep(0.01)
+    else:
+      stp=False
+      print(f"{df['date'].iloc[i].strftime('%Y-%m-%d')}  "
+          f"{df['close'].iloc[i]:>10.2f}  ")
+      time.sleep(0.01)
     # ----- entry logic --------------------------------------------------------
     if in_pos == 0 and pos_i != 0:
         in_pos  = pos_i
@@ -133,4 +138,4 @@ for idx, row in df.iterrows():
     print(f"{row['date'].strftime('%Y-%m-%d')}  "
           f"{row['close']:>10.2f}  "
           f"{curve[idx]:>10.2f}")
-    time.sleep(0.6)
+    time.sleep(0.2)
