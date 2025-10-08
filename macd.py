@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import time
-from tqdm import tqdm   # nice progress bar (pip install tqdm)
+from tqdm import tqdm
 
 # ------------------------------------------------ read data ---------------------
 df = pd.read_csv('btc_daily.csv', parse_dates=['date'])
@@ -12,24 +12,26 @@ ema26 = df['close'].ewm(span=26, min_periods=26, adjust=False).mean()
 macd  = ema12 - ema26
 signal = macd.ewm(span=9, min_periods=9, adjust=False).mean()
 
-# 1/-1 on cross
 cross = np.where((macd > signal) & (macd.shift() <= signal.shift()),  1,
                 np.where((macd < signal) & (macd.shift() >= signal.shift()), -1, 0))
 pos = pd.Series(cross, index=df.index).replace(0, np.nan).ffill().fillna(0)
 
-# =====================  GRID: 1.0 – 5.0 =======================================
-lev_grid = np.arange(1.0, 5.1, 0.1)          # 1.0, 1.1, …, 5.0
-summary  = []                                # list-of-dicts for results
+# =====================  GRIDS ================================================
+lev_grid = np.round(np.arange(1.0, 5.1, 0.1), 2)        # 1.0 … 5.0
+stp_grid = np.round(np.arange(0.001, 0.081, 0.002), 3)  # 0.001 … 0.080 step 0.002
 
-for LEVERAGE in tqdm(lev_grid, desc='leverage loop'):
-    # ----------  everything below is identical to your original loop ----------
+summary = []   # list-of-dicts
+
+for LEVERAGE in tqdm(lev_grid, desc='leverage'):
+  for STP_PCT in tqdm(stp_grid, desc='stop %', leave=False):
+
+    # ----------  identical inner loop to your original -----------------------
     curve    = [10000]
     in_pos   = 0
     entry_p  = None
     entry_d  = None
     trades   = []
     stp      = False
-    stp_pct  = 0.032
     days_stp = 0
     stp_cnt  = 0
     stp_cnt_max = 0
@@ -43,9 +45,9 @@ for LEVERAGE in tqdm(lev_grid, desc='leverage loop'):
         if (not stp) and in_pos != 0:
             hh = df['high'].iloc[i]
             ll = df['low'].iloc[i]
-            if (entry_p/hh - 1)*in_pos >= stp_pct or (entry_p/ll - 1)*in_pos >= stp_pct:
+            if (entry_p/hh - 1)*in_pos >= STP_PCT or (entry_p/ll - 1)*in_pos >= STP_PCT:
                 stp = True
-                stp_price = curve[-1] * (1 - stp_pct * LEVERAGE)
+                stp_price = curve[-1] * (1 - STP_PCT * LEVERAGE)
                 stp_cnt += 1
                 stp_cnt_max = max(stp_cnt_max, stp_cnt)
 
@@ -60,7 +62,7 @@ for LEVERAGE in tqdm(lev_grid, desc='leverage loop'):
         if in_pos != 0 and pos_i == -in_pos:
             ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
             if stp:
-                trades.append((entry_d, df['date'].iloc[i], -stp_pct*LEVERAGE))
+                trades.append((entry_d, df['date'].iloc[i], -STP_PCT*LEVERAGE))
             else:
                 trades.append((entry_d, df['date'].iloc[i], ret))
                 stp_cnt = 0 if ret >= 0 else stp_cnt + 1
@@ -102,9 +104,9 @@ for LEVERAGE in tqdm(lev_grid, desc='leverage loop'):
                   abs(np.percentile(daily_ret, 5))) if daily_ret.size else np.nan
     trades_per_year = len(trades) / n_years
 
-    # collect row
     summary.append({
         'lev': LEVERAGE,
+        'stp_pct': STP_PCT,
         'final': curve.iloc[-1],
         'cagr': cagr,
         'vol': vol,
@@ -122,10 +124,18 @@ for LEVERAGE in tqdm(lev_grid, desc='leverage loop'):
     })
 
 # ---------------------------  RESULT TABLE  ----------------------------------
-summary = pd.DataFrame(summary).set_index('lev')
-print('\n====== SUMMARY ======')
-print(summary.round(3))
+summary = pd.DataFrame(summary)
+print('\n====== GRID COMPLETE ======')
+print(summary.round(3).tail())   # quick peek at tail
 
-# quick peek: best Sharpe
-print('\nBest Sharpe:')
-print(summary.loc[summary.sharpe.idxmax()])
+# ---- top-10 by Calmar -------------------------------------------------------
+top_calmar = summary.nlargest(10, 'calmar')[['lev', 'stp_pct', 'calmar', 'cagr', 'maxdd', 'sharpe']]
+print('\nTop 10 combinations by Calmar:')
+print(top_calmar.round(3))
+
+# ---- best Sharpe -----------------------------------------------------------
+best = summary.loc[summary.sharpe.idxmax()]
+print('\nBest Sharpe:\n', best)
+
+# ---- save everything -------------------------------------------------------
+summary.to_csv('macd_lev_stp_grid.csv', index=False)
