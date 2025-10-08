@@ -49,7 +49,7 @@ for i in range(1, len(df)):
     if in_pos != 0 and pos_i == -in_pos:
         ret = (p_now / entry_p - 1) * in_pos * LEVERAGE
         if stp == True:
-          trades.append((entry_d, df['date'].iloc[i], stp_price/curve[-1]-1))
+          trades.append((entry_d, df['date'].iloc[i], -stp_pct)
         else:
           trades.append((entry_d, df['date'].iloc[i], ret))
         in_pos = 0
@@ -61,13 +61,13 @@ for i in range(1, len(df)):
       curve.append(stp_price)
       days_stp=days_stp+1
       print(f"{df['date'].iloc[i].strftime('%Y-%m-%d')}  "
-          f"STOP {df['close'].iloc[i]:>10.2f}  "
-          f"CURVE {curve[-1] * (1 + (entry_p*(1-stp_pct)/entry_p - 1) * in_pos * LEVERAGE)}")
+          f"STOP @ {df['close'].iloc[i]:>10.2f}  "
+          f"CURVE {curve[-1]}")
     else:
       curve.append(curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE))
       print(f"{df['date'].iloc[i].strftime('%Y-%m-%d')}  "
           f" {df['close'].iloc[i]:>10.2f}  "
-          f"CURVE {curve[-1] * (1 + (p_now/p_prev - 1) * in_pos * LEVERAGE)}")
+          f"CURVE {curve[-1]}")
     time.sleep(0.01)
 
 curve = pd.Series(curve, index=df.index)
