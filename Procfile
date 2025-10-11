@@ -1,1 +1,1 @@
-worker: python ask_deepseek.py
+python lr_live.py --dry $DRY_RUN
