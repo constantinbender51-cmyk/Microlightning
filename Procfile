@@ -1,1 +1,2 @@
-python lr_live.py
+worker: python lr_live.py
+
