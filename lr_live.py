@@ -24,8 +24,9 @@ import pandas as pd
 import kraken_futures as kf
 import kraken_ohlc
 
+# --------------  NEW: global dry-run flag  -------------------------
 dry = os.getenv("DRY_RUN", "false").lower() in {"1", "true", "yes"}
-#  remove argparse --dry completely
+# -------------------------------------------------------------------
 
 SYMBOL_FUTS_UC = "PF_XBTUSD"
 SYMBOL_FUTS_LC = "pf_xbtusd"
@@ -224,7 +225,7 @@ def scan_signal(api: kf.KrakenFuturesApi, model6: ModelBundle, model10: ModelBun
     df = kraken_ohlc.get_ohlc(SYMBOL_OHLC, INTERVAL)
     p6  = model6.predict_last(df)
     p10 = model10.predict_last(df)
-    log.info("Pred 6-day=%.2f %%  10-day=%.2f %%", p6, p10)
+    log.info("Pred 6-day=%.2f %%  10-day pred=%.2f %%", p6, p10)
 
     state = load_state()
     last = state.get("last_signal")
@@ -246,7 +247,7 @@ def scan_signal(api: kf.KrakenFuturesApi, model6: ModelBundle, model10: ModelBun
 # ------------------------------------------------------------------
 # 8.  TRADE STEP
 # ------------------------------------------------------------------
-def trade_step(api: kf.KrakenFuturesApi, model6: ModelBundle, model10: ModelBundle, dry: bool):
+def trade_step(api: kf.KrakenFuturesApi, model6: ModelBundle, model10: ModelBundle):
     signal = scan_signal(api, model6, model10)
     if signal == "HOLD":
         log.info("No trade")
@@ -294,10 +295,7 @@ def wait_until_00_05_utc():
 # 10.  MAIN
 # ------------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser(description="Kraken-Futures 6d/10d LinReg bot")
-    ap.add_argument("--dry", action="store_true", help="Dry-run (no orders)")
-    args = ap.parse_args()
-
+    # ----  argparse removed completely  ----
     api_key = os.getenv("KRAKEN_API_KEY")
     api_sec = os.getenv("KRAKEN_API_SECRET")
     if not api_key or not api_sec:
@@ -321,7 +319,7 @@ def main():
     while True:
         wait_until_00_05_utc()
         try:
-            trade_step(api, model6, model10, args.dry)
+            trade_step(api, model6, model10)   # <-- dry is now global
         except KeyboardInterrupt:
             log.info("Interrupted")
             break
