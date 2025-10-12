@@ -228,9 +228,6 @@ def scan_signal(api: kf.KrakenFuturesApi, model6: ModelBundle, model10: ModelBun
     p10 = model10.predict_last(df)
     log.info("Pred 6-day=%.2f %%  10-day pred=%.2f %%", p6, p10)
 
-    state = load_state()
-    last = state.get("last_signal")
-
     if p6 > 0 and p10 > 0:
         new = "BUY"
     elif p6 < 0 and p10 < 0:
@@ -238,12 +235,7 @@ def scan_signal(api: kf.KrakenFuturesApi, model6: ModelBundle, model10: ModelBun
     else:
         new = "HOLD"
 
-    if new != "HOLD" and new != last:
-        log.info("Signal change -> %s", new)
-        state["last_signal"] = new
-        save_state(state)
-        return new
-    return "HOLD"
+    return new
 
 # ------------------------------------------------------------------
 # 8. TRADE STEP 
@@ -251,13 +243,18 @@ def scan_signal(api: kf.KrakenFuturesApi, model6: ModelBundle, model10: ModelBun
 def trade_step(api: kf.KrakenFuturesApi,
                model6: ModelBundle,
                model10: ModelBundle):
-    prev, curr = scan_signal(api, model6, model10)
+    # ----  read PREVIOUS signal from disk  ----
+    state = load_state()
+    prev  = state.get("last_signal", "HOLD")
+    curr  = scan_signal(api, model6, model10)
 
     # 1.  flatten only when we move TO 0
     if prev != "HOLD" and curr == "HOLD":
         log.info("Signal → HOLD  –  flattening")
         cancel_all(api)
         flatten_position(api)
+        state["last_signal"] = curr
+        save_state(state)
         return
 
     # 2.  (re)enter only when we CROSS side
@@ -275,18 +272,20 @@ def trade_step(api: kf.KrakenFuturesApi,
 
         if dry:
             log.info("DRY-RUN: %s %.4f BTC market", curr, size_btc)
-            return
+        else:
+            ord = api.send_order({
+                "orderType": "mkt",
+                "symbol": SYMBOL_FUTS_LC,
+                "side": side,
+                "size": size_btc,
+            })
+            fill_p = float(ord.get("price", price))
 
-        ord = api.send_order({
-            "orderType": "mkt",
-            "symbol": SYMBOL_FUTS_LC,
-            "side": side,
-            "size": size_btc,
-        })
-        fill_p = float(ord.get("price", price))
+            pred6_today = abs(model6.predict_last(kraken_ohlc.get_ohlc(SYMBOL_OHLC, INTERVAL)))
+            place_stop(api, side, size_btc, fill_p, pred6_today)
 
-        pred6_today = abs(model6.predict_last(kraken_ohlc.get_ohlc(SYMBOL_OHLC, INTERVAL)))
-        place_stop(api, side, size_btc, fill_p, pred6_today)
+        state["last_signal"] = curr
+        save_state(state)
         return
 
     # 3.  no change
