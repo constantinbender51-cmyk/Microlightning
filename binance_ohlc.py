@@ -115,8 +115,13 @@ def get_ohlc_for_training(symbol: str = "BTCUSDT", interval: str = "1d") -> pd.D
     """
     Convenience function to fetch ALL available historical data for training.
     This is what you'll call in lr_live.py for model fitting.
+    Starts from 2017-01-01 to fetch maximum Bitcoin history.
     """
-    return get_ohlc(symbol=symbol, interval=interval, start_time=None, limit=None)
+    # Start from January 1, 2017 (before Bitcoin futures launched)
+    start_date = datetime(2017, 1, 1)
+    start_time_ms = int(start_date.timestamp() * 1000)
+    
+    return get_ohlc(symbol=symbol, interval=interval, start_time=start_time_ms, limit=None)
 
 
 def get_recent_ohlc(symbol: str = "BTCUSDT", interval: str = "1d", limit: int = 100) -> pd.DataFrame:
